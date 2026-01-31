@@ -1,6 +1,8 @@
-using System.Collections;
+﻿using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
+
+// X top, Z left;
 
 public class Path
 {
@@ -13,6 +15,8 @@ public class Path
     private GameObject startingTile, endingTile;
 
     public List<GameObject> GetGeneratedPath => path;
+    public GameObject GetStartingTile => startingTile;
+    public GameObject GetEndingTile => endingTile;
 
     public Path(int worldRadius)
     {
@@ -30,6 +34,19 @@ public class Path
         Debug.Log("Added Tile");
     }
 
+    void SetTileColor(GameObject tile, Color color)
+    {
+        Renderer renderer = tile.GetComponent<Renderer>();
+
+        if (renderer != null)
+        {
+            renderer.material.color = color;
+        }
+    }
+
+
+
+
     private bool AssignAndCheckStartingAndEndingTile()
     {
         var xIndex = Random.Range(0, topTiles.Count - 1);
@@ -38,19 +55,19 @@ public class Path
         startingTile = topTiles[xIndex];
         endingTile = bottomTiles[zIndex];
 
+        SetTileColor(startingTile, Color.green);  // START
+        SetTileColor(endingTile, Color.red);      // END
+
         return startingTile != null && endingTile != null;
     }
 
     bool FurtherRandomization(int prevDirection, ref GameObject currentTile)
     {
-        Debug.Log("Further Randomization Check");
-        Debug.Log("Prev direction is " + prevDirection);
 
         bool doRandomize = Random.value > 0.2f;
-        int verticalSteps = Random.Range(3, 5);
+        int verticalSteps = Random.Range(3, 8);
 
         if (!doRandomize) return false;
-        Debug.Log("Randomize more");
 
 
         for (int i = 0; i < verticalSteps; i++)
@@ -62,7 +79,7 @@ public class Path
                 int nextIndex = currentIndex + radius;
 
                 //Stop if out of bounds
-                Debug.Log("Generate additional path upward");
+                Debug.Log("Randomize: Generate additional path upward");
                 if (nextIndex >= WorldGeneration.GeneratedTiles.Count)
                 {
                     Debug.Log("Violate rule");
@@ -100,57 +117,111 @@ public class Path
             /*Randomize the number of left move taken by path during its first start */
             int randomizedStartOffset = Random.Range(3, 5);
 
+            // Clamp the offset to prevent going out of bounds
+            int currentZ = WorldGeneration.GeneratedTiles.IndexOf(currentTile) % radius;
+            int maxLeftMoves = radius - 1 - currentZ; // How many tiles are to the left
+            randomizedStartOffset = Mathf.Min(randomizedStartOffset, maxLeftMoves);
+
             for (int i = 0; i < randomizedStartOffset; i++)
                 MoveLeft(ref currentTile);
 
-            var safteyBreakX = 0;
-            int prevMovement = -1;
+            hasReachedX = false;
+            hasReachedZ = false; 
 
-            while (!hasReachedX)
+            int globalSafety = 0;
+
+            while (!hasReachedX && !hasReachedZ)
             {
-                safteyBreakX++;
-                if (safteyBreakX > 100)
+                globalSafety++;
+                if (globalSafety > 1000)
+                {
+                    Debug.LogError("Global safety break - infinite loop detected");
                     break;
-
-                //Store previous direction of vertical movement
-                // 0 -> Move up
-                // 1 -> Move down
-
-                // We move vertically on our xAxis
-                if (currentTile.transform.position.x > endingTile.transform.position.x)
-                {
-                    MoveDown(ref currentTile);
-                    prevMovement = 1;
                 }
-                else if (currentTile.transform.position.x < endingTile.transform.position.x)
+
+                Debug.Log("Inside while loop");
+                // ----- X MOVEMENT -----
+                var safetyX = 0;
+                while (!hasReachedX)
                 {
-                    MoveUp(ref currentTile);
-                    prevMovement = 0;
-                }
-                else
-                {
-                    Debug.Log("X Axis Reached");
-                    if (!FurtherRandomization(prevMovement, ref currentTile))
+                    safetyX++;
+                    if (safetyX > 100)
+                    {
+                        Debug.LogError("Safety X break");
+                        break;
+                    }
+
+                    if (currentTile.transform.position.x > endingTile.transform.position.x)
+                    {
+                        MoveDown(ref currentTile);
+                        Debug.Log("Move down");
+                    }
+                    else if (currentTile.transform.position.x < endingTile.transform.position.x)
+                    {
+                        MoveUp(ref currentTile);
+                        Debug.Log("Move up");
+                    }
+                    else
+                    {
                         hasReachedX = true;
+                    }
                 }
-            }
 
-            var safteyBreakZ = 0;
-            while (!hasReachedZ)
-            {
-                safteyBreakZ++;
-                if (safteyBreakZ > 100)
+                // ----- Z MOVEMENT -----
+                int counter = 0;
+                int safetyZ = 0;
+
+                while (!hasReachedZ)
+                {
+                    safetyZ++;
+                    if (safetyZ > 100)
+                    {
+                        Debug.LogError("Safety Z break");
+                        break;
+                    }
+
+                    int dir = Random.Range(0, 2);
+
+                    if (counter > 3 && FurtherRandomization(dir, ref currentTile))
+                    {
+                        // 🔁 GO BACK TO X LOOP
+                        hasReachedX = false;
+                        counter = 0;
+                        int randomNum = Random.Range(5, 7);
+                        
+                        // Check bounds before moving left
+                        int currentIndex = WorldGeneration.GeneratedTiles.IndexOf(currentTile);
+                        int currentZPos = currentIndex % radius;
+                        int maxMoves = radius - 1 - currentZPos;
+                        randomNum = Mathf.Min(randomNum, maxMoves);
+                        
+                        for (int i = 0; i < randomNum; i++)
+                        {
+                            MoveLeft(ref currentTile);  
+                        }
+                        break;
+                    }
+
+                    if (currentTile.transform.position.z > endingTile.transform.position.z)
+                    {
+                        MoveRight(ref currentTile);
+                        Debug.Log("Move right");
+                        counter++;
+                    }
+                    else if (currentTile.transform.position.z < endingTile.transform.position.z)
+                    {
+                        MoveLeft(ref currentTile);
+                        Debug.Log("Move left");
+                        counter++;
+                    }
+                    else if (currentTile.transform.position.z == endingTile.transform.position.z)
+                        hasReachedZ = true;
+                }
+
+                // Break if both safety checks triggered
+                if (safetyZ > 100 || safetyX > 100)
                     break;
-
-                // We move horizontally on our zAxis
-                if (currentTile.transform.position.z > endingTile.transform.position.z)
-                    MoveRight(ref currentTile);
-                else if (currentTile.transform.position.z < endingTile.transform.position.z)
-                    MoveLeft(ref currentTile);
-                else
-                    hasReachedZ = true;
             }
-            path.Add(endingTile);
         }
     }
 

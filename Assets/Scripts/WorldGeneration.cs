@@ -31,9 +31,16 @@ public class WorldGeneration : MonoBehaviour
         //World Generated
         pathGenerator.GeneratePath();
 
+        GameObject startTile = pathGenerator.GetStartingTile;
+        GameObject endTile = pathGenerator.GetEndingTile;
+
         foreach(var pObject in pathGenerator.GetGeneratedPath)
         {
-            pObject.SetActive(false);
+            // Don't hide the starting and ending tiles
+            if (pObject != startTile && pObject != endTile)
+            {
+                pObject.SetActive(false);
+            }
         }
     }
 }
